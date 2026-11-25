@@ -19,6 +19,22 @@ Why this line fits the judge's brief:
   no setup, no explanation and no signature.
 - It finds a fresh angle: not a dead grandmother, not a flat
   tyre, not a sudden fever — a civic duty nobody volunteers for.
+
+Why jury duty beats the obvious excuses, one by one:
+- A dead grandmother is the first excuse every manager has heard,
+  so it reads as a copy of a copy before the second word.
+- A flat tyre invites the manager to suggest a taxi, a bus, or
+  working from the roadside — it opens a negotiation, not a day off.
+- A sudden fever invites the manager to ask for a doctor's note
+  tomorrow, which turns one sick day into paperwork.
+- Jury duty invites nothing: the court picked the date, the court
+  holds the phone, and the manager has no counter-move at all.
+  The excuse wins because there is nothing to argue with.
+
+Determinism: ENTRY is a single fixed string, never generated, so
+every run writes the same bytes. The self-test pins the shape
+(83 characters, 16 words, all ASCII) and the round-trip check
+proves the write path adds and strips nothing.
 """
 
 import os
@@ -99,10 +115,13 @@ def self_test():
         "gate": "pass",
     }, f"entry description changed: {describe_entry(ENTRY)}"
     assert round_trip_entry(ENTRY) == ENTRY.encode("utf-8")
+    assert determinism_check(ENTRY) == ENTRY.encode("utf-8")
     assert ENTRY.startswith("Sorry, jury duty"), "entry must open as a hurried apology"
     assert ENTRY.endswith("till four."), "entry must end on the phone detail"
     assert "jury duty" in ENTRY, "entry must keep its fresh angle"
     assert "GTA" not in ENTRY, "entry must not name the game — that is a confession"
+    assert len(ENTRY.split()) <= 20, "entry must stay within the 20-word cap"
+    assert "\n" not in ENTRY and "\r" not in ENTRY, "entry must stay one line"
     bad_cases = [
         ("", "empty entry"),
         (" " * 10, "whitespace-only entry"),
@@ -113,6 +132,12 @@ def self_test():
         ("trailing ", "trailing-space entry"),
         (" leading", "leading-space entry"),
         ("word " * 21, "entry over 20 words"),
+        ("one two three four five six seven eight nine ten eleven twelve "
+         "thirteen fourteen fifteen sixteen seventeen eighteen nineteen "
+         "twenty twenty-one", "entry of 21 real words"),
+        ("Sorry, jury duty.\n", "entry ending with a newline"),
+        ("Sorry, jury duty picked me this morning, court says I can't "
+         "use my phone till four. ", "entry with a trailing space"),
         (123, "non-string entry"),
         (None, "none entry"),
         (b"bytes", "bytes entry"),
@@ -184,6 +209,36 @@ def round_trip_entry(text):
         return raw
     finally:
         os.unlink(tmp_path)
+
+
+def determinism_check(text):
+    """Run the entry writer twice and require byte-identical output.
+
+    The judge compares the exact submitted text, so two runs of the
+    program must produce the same bytes. Writes to two throwaway
+    files, reads both back, compares, and removes both afterwards.
+    Returns the shared bytes so callers can also check the hash.
+    """
+    first_path = None
+    second_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            first_path = tmp.name
+        with tempfile.NamedTemporaryFile(delete=False) as tmp:
+            second_path = tmp.name
+        write_entry(first_path)
+        write_entry(second_path)
+        with open(first_path, "rb") as f:
+            first_bytes = f.read()
+        with open(second_path, "rb") as f:
+            second_bytes = f.read()
+        assert first_bytes == second_bytes, "runs differ: entry is not deterministic"
+        assert first_bytes == text.encode("utf-8"), "run output differs from ENTRY"
+        return first_bytes
+    finally:
+        for path in (first_path, second_path):
+            if path and os.path.exists(path):
+                os.unlink(path)
 
 
 def main():
